@@ -1,2 +1,2 @@
 # itdma-oauth-app
-A secure FastAPI web application implementing JWT (JSON Web Token) authentication, a custom frontend interface, and a PostgreSQL database.
+A FastAPI web application implementing OAuth 2.0 authentication with PostgreSQL database for API performance benchmarking.
