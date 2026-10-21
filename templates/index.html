@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>StudentAuth - OAuth 2.0</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <span class="logo-badge">OAuth2</span>
+    StudentAuth API
+  </div>
+  <span class="header-tag">Opaque Token | DB Lookup | Port 8001</span>
+</header>
+
+<div class="page">
+
+  <!-- Register -->
+  <div class="card">
+    <div class="card-title">Register Student</div>
+    <div class="endpoint-row">
+      <span class="method">POST</span>
+      <span class="path">/auth/register</span>
+    </div>
+    <div class="field">
+      <label>Full Name</label>
+      <input type="text" id="reg-name" placeholder="e.g. Thabo Nkosi"/>
+    </div>
+    <div class="field">
+      <label>Email</label>
+      <input type="email" id="reg-email" placeholder="thabo@university.ac.za"/>
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input type="password" id="reg-password" placeholder="min. 8 characters"/>
+    </div>
+    <button class="btn btn-primary" onclick="register()">Create Account</button>
+    <div class="response-box" id="reg-result">Response will appear here...</div>
+  </div>
+
+  <!-- Token -->
+  <div class="card">
+    <div class="card-title">Request Access Token</div>
+    <div class="endpoint-row">
+      <span class="method">POST</span>
+      <span class="path">/auth/token</span>
+    </div>
+    <div class="flow-box">
+      <div class="flow-step"><div class="flow-num">1</div> Client sends credentials</div>
+      <div class="flow-step"><div class="flow-num">2</div> Server issues opaque token -> saves to DB</div>
+      <div class="flow-step"><div class="flow-num">3</div> Every request: DB lookup to validate</div>
+    </div>
+    <div class="field">
+      <label>Email</label>
+      <input type="email" id="login-email" placeholder="thabo@university.ac.za"/>
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input type="password" id="login-password" placeholder="your password"/>
+    </div>
+    <button class="btn btn-primary" onclick="getToken()">Get Access Token</button>
+    <div class="token-meta" id="token-meta"></div>
+    <div class="token-label" id="token-label" style="display:none">OAuth2 Access Token</div>
+    <div class="token-display" id="token-display"></div>
+    <div class="response-box" id="login-result">Response will appear here...</div>
+  </div>
+
+  <!-- Profile -->
+  <div class="card bottom-panel">
+    <div class="card-title">My Profile</div>
+    <div class="endpoint-row">
+      <span class="method" style="color:#93C5FD">GET</span>
+      <span class="path">/students/me</span>
+      <span class="path" style="color:rgba(255,255,255,0.3)">- DB token lookup on each call</span>
+    </div>
+    <button class="btn btn-outline" onclick="getProfile()">Fetch My Profile</button>
+    <div class="profile-grid" id="profile-grid"></div>
+    <div class="response-box" id="profile-result">Response will appear here...</div>
+  </div>
+
+</div>
+
+<script>
+  let oauthToken = null;
+
+  function setResult(id, data, isError = false) {
+    const el = document.getElementById(id);
+    el.textContent = JSON.stringify(data, null, 2);
+    el.className = 'response-box ' + (isError ? 'error' : 'success');
+  }
+
+  async function register() {
+    const body = {
+      full_name: document.getElementById('reg-name').value,
+      email:     document.getElementById('reg-email').value,
+      password:  document.getElementById('reg-password').value,
+    };
+    try {
+      const res = await fetch('/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      setResult('reg-result', data, !res.ok);
+    } catch (e) {
+      setResult('reg-result', { error: e.message }, true);
+    }
+  }
+
+  async function getToken() {
+    const body = {
+      email:    document.getElementById('login-email').value,
+      password: document.getElementById('login-password').value,
+    };
+    try {
+      const res = await fetch('/auth/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (res.ok && data.access_token) {
+        oauthToken = data.access_token;
+        document.getElementById('token-display').style.display = 'block';
+        document.getElementById('token-label').style.display = 'block';
+        document.getElementById('token-display').textContent = oauthToken;
+
+        const meta = document.getElementById('token-meta');
+        meta.style.display = 'flex';
+        meta.innerHTML = `
+          <span class="chip">type: ${data.token_type}</span>
+          <span class="chip">scope: ${data.scope}</span>
+          <span class="chip">expires_in: ${data.expires_in}s</span>`;
+      }
+      setResult('login-result', data, !res.ok);
+    } catch (e) {
+      setResult('login-result', { error: e.message }, true);
+    }
+  }
+
+  async function getProfile() {
+    if (!oauthToken) {
+      setResult('profile-result', { error: 'No token - request an access token first' }, true);
+      return;
+    }
+    try {
+      const res = await fetch('/students/me', {
+        headers: { 'Authorization': 'Bearer ' + oauthToken },
+      });
+      const data = await res.json();
+      if (res.ok) {
+        const grid = document.getElementById('profile-grid');
+        grid.innerHTML = Object.entries(data).map(([k, v]) => `
+          <div class="profile-field">
+            <div class="profile-key">${k}</div>
+            <div class="profile-val">${v ?? '-'}</div>
+          </div>`).join('');
+      }
+      setResult('profile-result', data, !res.ok);
+    } catch (e) {
+      setResult('profile-result', { error: e.message }, true);
+    }
+  }
+</script>
+</body>
+</html>
